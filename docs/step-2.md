@@ -74,6 +74,10 @@ tools/fetch-ow-electron-app.sh iopjffpkfkhnkacicapeebfaicmffbekflfbfkmf
 runtime/ow-electron/bin/linuxwolf-run ~/.local/share/linuxwolf/apps/iopjffpkfkhnkacicapeebfaicmffbekflfbfkmf/4.0.4
 ```
 
+`linuxwolf-run` runs `npm install` and downloads the Electron binary on
+first start if needed (since Electron 42 the npm package no longer
+downloads it during `npm install`). Needs Node.js >= 22.12.
+
 In MetaBot, make sure Aniimo is not hidden in the game list, then start
 Aniimo through Steam. MetaBot polls every 30 s and needs two polls in a
 row, so the prompt or companion shows up 30 to 60 s after the game starts.
