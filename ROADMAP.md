@@ -15,25 +15,25 @@ not a classic `.opk` web app. For Aniimo it only needs "is the game
 running", a transparent always-on-top window and hotkeys. It does not use
 Overwolf's game events or overlay injection for Aniimo.
 
-## Step 2: ow-electron runtime for Metabot
-
-This assumes the native route (B in [docs/spike-1.md](docs/spike-1.md#two-ways-to-run-metabot)).
-The alternative is running the Windows build of Metabot inside the game's
-Proton prefix.
+## Step 2: ow-electron runtime for Metabot (done, see [docs/step-2.md](docs/step-2.md))
 
 Run Metabot's own `app.asar` on stock Linux Electron, with Linuxwolf
-providing what ow-electron adds:
+providing what ow-electron adds (`runtime/ow-electron`):
 
-- `app.overwolf.packages` (event emitter, per-package `ready`), with `gep`,
-  `overlay`, `recorder`, `utility` and `ads` as no-op or partial
-  implementations. Metabot already disables features cleanly when a
-  package is missing.
-- Shims for the Windows-only bits Metabot calls for Aniimo: `reg.exe query`
-  for Steam paths and the `Running` flag (answered from `lw-detect` and the
-  Linux Steam install), `koffi` calls to `user32`/`kernel32`, and the
-  `process.platform` guards.
-- Wayland/KDE: always-on-top + click-through companion window (KWin script
-  or XWayland), global hotkeys via the XDG GlobalShortcuts portal.
+- [x] `app.overwolf` with `packages` (per-package `ready`); `gep` and
+  `utility` as early stubs, opt-in. Metabot needs none for Aniimo.
+- [x] `reg.exe` emulation answered from the Linux Steam client (install
+  path, installed apps, `Running` flag from `/proc` + `registry.vdf`).
+- [x] Shims for `koffi` and `electron-updater`; in-memory patches for the
+  four `process.platform` guards around Steam detection.
+- [x] KDE: XWayland by default (keep-above, click-through, X11 hotkeys
+  while the Proton game has focus), on-screen-display window type for
+  click-through companions; native Wayland via a KWin script (untested).
+- [x] Install ow-electron apps from Overwolf's update feed
+  (`tools/fetch-ow-electron-app.sh`).
+- [x] Headless test: fake Aniimo process -> Metabot shows its prompt and
+  opens the Aniimo Companion.
+- [ ] Same on a real Plasma desktop with Aniimo (moves into step 3).
 
 ## Step 3: Metabot + Aniimo end to end
 
