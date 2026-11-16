@@ -35,6 +35,17 @@ providing what ow-electron adds (`runtime/ow-electron`):
   opens the Aniimo Companion.
 - [ ] Same on a real Plasma desktop with Aniimo (moves into step 3).
 
+## Side track: th.gl Palia app (see [docs/palia.md](docs/palia.md))
+
+th.gl ships its own native Linux Companion App (beta) that reads Palia
+under Proton and draws an X11 overlay. Linuxwolf only installs and checks
+it; the Overwolf variant (`.opk` + Windows .NET memory-reading plugin) is
+not worth emulating.
+
+- [x] Palia in `lw-detect` (Steam 2707930, Overwolf game id 23186).
+- [x] Installer with checksum check, setup check script.
+- [ ] Run it with Palia on a real Plasma desktop.
+
 ## Step 3: Metabot + Aniimo end to end
 
 - Metabot detects Aniimo started through Steam/Proton and shows its

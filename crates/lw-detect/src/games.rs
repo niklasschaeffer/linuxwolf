@@ -12,12 +12,22 @@ pub struct KnownGame {
 }
 
 /// Steam app ids are taken from the Steam store URLs.
-pub static KNOWN_GAMES: &[KnownGame] = &[KnownGame {
-    // https://store.steampowered.com/app/4126040
-    steam_app_id: 4126040,
-    name: "Aniimo",
-    overwolf_game_id: None,
-}];
+pub static KNOWN_GAMES: &[KnownGame] = &[
+    KnownGame {
+        // https://store.steampowered.com/app/4126040
+        steam_app_id: 4126040,
+        name: "Aniimo",
+        overwolf_game_id: None,
+    },
+    KnownGame {
+        // https://store.steampowered.com/app/2707930
+        steam_app_id: 2707930,
+        name: "Palia",
+        // From the manifest of th.gl's "Palia Map" Overwolf app
+        // (game_targeting.game_ids = [23186]).
+        overwolf_game_id: Some(23186),
+    },
+];
 
 pub fn lookup(steam_app_id: u32) -> Option<&'static KnownGame> {
     KNOWN_GAMES.iter().find(|g| g.steam_app_id == steam_app_id)

@@ -208,6 +208,26 @@ mod tests {
     }
 
     #[test]
+    fn detects_palia_under_proton() {
+        let tmp = tempfile::tempdir().unwrap();
+        let env = &[
+            ("SteamAppId", "2707930"),
+            ("STEAM_COMPAT_DATA_PATH", "/home/nick/.steam/steam/steamapps/compatdata/2707930"),
+        ];
+        fake_proc(
+            tmp.path(),
+            400,
+            &["Z:\\steamapps\\common\\Palia\\Palia\\Binaries\\Win64\\PaliaClient-Win64-Shipping.exe"],
+            env,
+        );
+        let games = scan(tmp.path());
+        assert_eq!(games.len(), 1, "{games:#?}");
+        assert_eq!(games[0].name.as_deref(), Some("Palia"));
+        assert_eq!(games[0].exe, "PaliaClient-Win64-Shipping.exe");
+        assert_eq!(crate::games::lookup(2707930).unwrap().overwolf_game_id, Some(23186));
+    }
+
+    #[test]
     fn detects_unknown_wine_game_without_steam() {
         let tmp = tempfile::tempdir().unwrap();
         fake_proc(tmp.path(), 300, &["C:/Games/Foo/foo.EXE"], &[("WINEPREFIX", "/home/nick/.wine")]);
