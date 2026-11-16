@@ -1,0 +1,13 @@
+[package]
+name = "lw-overlay-layer"
+description = "Vulkan layer that draws the Linuxwolf overlay into a game's swapchain (works under Proton via DXVK/VKD3D)"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[lib]
+name = "VkLayer_linuxwolf_overlay"
+crate-type = ["cdylib"]
+
+[dependencies]
+ash = { version = "0.38", default-features = false, features = ["std", "debug"] }

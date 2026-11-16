@@ -1,0 +1,9 @@
+[package]
+name = "lw-vk-smoketest"
+description = "Headless Vulkan app that checks the overlay layer draws into presented images"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+ash = "0.38"
