@@ -1,0 +1,11 @@
+[workspace]
+resolver = "2"
+members = ["crates/lw-detect", "crates/lw-overlay-layer", "crates/lw-vk-smoketest"]
+
+[workspace.package]
+edition = "2021"
+version = "0.0.1"
+publish = false
+
+[profile.release]
+debug = 1

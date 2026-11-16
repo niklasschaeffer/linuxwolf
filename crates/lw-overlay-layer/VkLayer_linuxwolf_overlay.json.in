@@ -1,0 +1,13 @@
+{
+  "file_format_version": "1.0.0",
+  "layer": {
+    "name": "VK_LAYER_LINUXWOLF_overlay",
+    "type": "GLOBAL",
+    "library_path": "@LIBRARY_PATH@",
+    "api_version": "1.3.0",
+    "implementation_version": "1",
+    "description": "Linuxwolf in-game overlay",
+    "enable_environment": { "LINUXWOLF_OVERLAY": "1" },
+    "disable_environment": { "DISABLE_LINUXWOLF_OVERLAY": "1" }
+  }
+}
