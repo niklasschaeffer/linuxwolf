@@ -11,6 +11,6 @@
     "test": "node --test test/*.test.js"
   },
   "devDependencies": {
-    "electron": "42.11.4"
+    "electron": "42.11.16"
   }
 }
