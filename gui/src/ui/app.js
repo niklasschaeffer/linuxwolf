@@ -42,7 +42,7 @@ function initials(name) {
   return name.replace(/[^A-Za-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
 }
 
-const KIND = { 'ow-electron': 'Overwolf Electron app · Linuxwolf runtime', appimage: 'Native Linux app' };
+const KIND = { 'ow-electron': 'Overwolf Electron app · Linuxwolf runtime', opk: 'Classic Overwolf app · Linuxwolf runtime', appimage: 'Native Linux app' };
 
 // ---------- Library ----------
 
@@ -52,7 +52,7 @@ function appCard(a) {
   const gameChips = a.games.map((id, i) => {
     const live = S.games.running.some((g) => g.appId === id);
     const inst = a.gamesInstalled.includes(id);
-    return `<span class="chip ${live ? 'live' : inst ? 'on' : ''}" title="${live ? 'running now' : inst ? 'installed in Steam' : 'not installed in Steam'}">${live ? '● ' : ''}${esc(a.gameNames[i])}</span>`;
+    return `<span class="chip ${live ? 'live' : inst ? 'on' : ''}" title="${live ? 'running now' : inst ? 'installed' : typeof id === 'number' ? 'not installed in Steam' : 'not found in a Wine prefix'}">${live ? '● ' : ''}${esc(a.gameNames[i])}</span>`;
   }).join('');
   let status;
   if (task) status = `<span class="dot busy"></span><span class="last">${esc(task.label)}: ${esc(task.lastLine)}</span>`;
@@ -71,7 +71,7 @@ function appCard(a) {
     buttons.push(`<button class="btn primary" data-act="app:launch" data-id="${esc(a.id)}" ${task ? 'disabled' : ''}>Start</button>`);
   }
   if (a.check) buttons.push(`<button class="btn" data-act="app:check" data-id="${esc(a.id)}" ${task ? 'disabled' : ''}>Setup check</button>`);
-  if (a.installed && a.kind === 'ow-electron' && !a.running) buttons.push(`<button class="btn" data-act="app:install" data-id="${esc(a.id)}" title="Look for a newer version in Overwolf's feed" ${task ? 'disabled' : ''}>Update</button>`);
+  if (a.installed && (a.kind === 'ow-electron' || a.kind === 'opk') && !a.running) buttons.push(`<button class="btn" data-act="app:install" data-id="${esc(a.id)}" title="Look for a newer version at Overwolf" ${task ? 'disabled' : ''}>Update</button>`);
   if (a.installed) buttons.push(`<button class="btn" data-act="app:openFolder" data-id="${esc(a.id)}">Folder</button>`);
   if (a.installed && !a.running) buttons.push(`<button class="btn danger" data-act="app:remove" data-id="${esc(a.id)}">Remove</button>`);
 
@@ -102,8 +102,8 @@ function renderLibrary() {
     <p class="sub">Overwolf apps that run on Linux, next to your games under Proton.</p>
     <div class="grid">${known.map(appCard).join('')}</div>
     ${custom.length ? `<h2>Other installed apps</h2><div class="grid">${custom.map(appCard).join('')}</div>` : ''}
-    <h2>Add an Overwolf Electron app</h2>
-    <div class="hint">Paste the app id (40 letters) of an app that Overwolf ships as an ow-electron app. Classic Overwolf web apps (.opk) do not run yet.</div>
+    <h2>Add an Overwolf app</h2>
+    <div class="hint">Paste the app id (40 letters) of an Overwolf app: classic apps (.opk) come from Overwolf's store catalog, ow-electron apps from their update feed. Apps that need Overwolf's game events or native plugins will miss those features.</div>
     <form class="add" id="add-form"><input id="add-uid" placeholder="e.g. iopjffpkfkhnkacicapeebfaicmffbekflfbfkmf" spellcheck="false" autocomplete="off"><button class="btn">Install</button></form>`;
   $('#add-form').onsubmit = async (e) => {
     e.preventDefault();
@@ -146,8 +146,8 @@ function renderGames() {
         <td class="right">${g.running ? '' : `<button class="btn small primary" data-act="game:play" data-id="${g.appId}">Play</button>`}</td>
       </tr>`).join('')}
     </tbody></table>` : `<div class="empty">${S.games.installed.length ? 'No game matches.' : 'No Steam games found.'}</div>`}
-    ${otherRunning.length ? `<h2>Other Wine/Proton processes</h2><table><thead><tr><th>Program</th><th>Runner</th><th>Prefix</th></tr></thead><tbody>
-      ${otherRunning.map((g) => `<tr><td><b>${esc(g.name || g.exe)}</b><div class="hint mono">pid ${g.pid}${g.appId ? ` · Steam ${g.appId}` : ''}</div></td><td>${esc(g.runner)}</td><td class="mono hint">${esc(g.winePrefix || '–')}</td></tr>`).join('')}
+    ${otherRunning.length ? `<h2>Other games and Wine/Proton processes</h2><table><thead><tr><th>Program</th><th>Runner</th><th>Prefix</th></tr></thead><tbody>
+      ${otherRunning.map((g) => `<tr><td><b>${esc(g.name || g.exe)}</b><div class="hint mono">pid ${g.pid}${typeof g.appId === 'number' ? ` · Steam ${g.appId}` : ''}</div></td><td>${esc(g.runner)}</td><td class="mono hint">${esc(g.winePrefix || '–')}</td></tr>`).join('')}
     </tbody></table>` : ''}`;
   const qi = $('#game-q');
   qi.oninput = () => {

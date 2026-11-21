@@ -53,6 +53,20 @@ not worth emulating.
   checks and logs (`gui/`).
 - [ ] Try it on a real Plasma desktop (tray, notifications, Wayland).
 
+## Side track: WoW Forever Map (see [docs/wow-forever-map.md](docs/wow-forever-map.md))
+
+First classic Overwolf app (`.opk`). Linuxwolf now hosts classic apps:
+Electron serves the app from `overwolf-extension://<uid>/` and gives it an
+`overwolf.*` API (windows, games, io, hotkeys, tray, screenshots).
+
+- [x] Host for classic apps in `runtime/ow-electron/src/opk`, picked by
+  `linuxwolf-run` for unpacked `.opk` folders.
+- [x] Install from Overwolf's store catalog (`tools/fetch-opk-app.sh`).
+- [x] WoW Forever (Overwolf game 28268) under Wine/Proton: detection, Wine
+  prefix paths, install lookup.
+- [x] Headless test with the real app; listed in the desktop app.
+- [ ] Run it with WoW Forever on a real Plasma desktop.
+
 ## Step 3: Metabot + Aniimo end to end
 
 - Metabot detects Aniimo started through Steam/Proton and shows its
@@ -66,7 +80,7 @@ not worth emulating.
 - App download: ow-electron apps come from Overwolf's update feeds,
   classic apps from the public store catalog. Clarify Overwolf's terms
   and talk to app developers before building a store client on top.
-- Classic `.opk` apps (e.g. the Aniimo apps in the Overwolf catalog):
-  CEF/Electron host plus an `overwolf.*` JS API shim.
+- Classic `.opk` apps: the host exists now (see the WoW Forever Map side
+  track); more of the `overwolf.*` API as more apps need it.
 - Game events (GEP replacement) and in-game overlay for games where apps
   need them (LoL, TFT, Valorant, ...), using the Vulkan layer.

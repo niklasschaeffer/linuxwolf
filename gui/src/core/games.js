@@ -7,12 +7,19 @@ const path = require('path');
 const steam = require('../../../runtime/ow-electron/src/steam');
 const proc = require('../../../runtime/ow-electron/src/proc');
 const vdf = require('../../../runtime/ow-electron/src/vdf');
+const owGames = require('../../../runtime/ow-electron/src/opk/games');
 
-/** Games Linuxwolf knows by name. Keep in sync with crates/lw-detect/src/games.rs. */
+/**
+ * Games Linuxwolf knows by name: Steam app ids (keep in sync with
+ * crates/lw-detect/src/games.rs) and non-Steam Wine games by key, matched
+ * through the classic-app runtime's table (runtime/ow-electron/src/opk/games.js).
+ */
 const KNOWN_GAMES = {
   4126040: { name: 'Aniimo', overwolfGameId: null },
   2707930: { name: 'Palia', overwolfGameId: 23186 },
+  'wow-forever': { name: 'World of Warcraft: Forever', overwolfGameId: 28268, steam: false },
 };
+const WINE_GAMES = Object.entries(KNOWN_GAMES).filter(([, g]) => g.steam === false);
 
 // Steam installs these like games. They are not.
 const NOT_GAMES = /^(Proton|Steam Linux Runtime|Steamworks Common Redistributables|SteamVR)\b/i;
@@ -42,16 +49,40 @@ function installed() {
   return [...out.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Games running under Proton/Wine: [{ appId, pid, exe, runner, winePrefix, name }]. */
+/**
+ * Games running under Proton/Wine: [{ appId, pid, exe, runner, winePrefix, name }].
+ * `appId` is the Steam app id, or the KNOWN_GAMES key of a non-Steam game
+ * (e.g. "wow-forever", also when it was added to Steam as a non-Steam game).
+ */
 function running(procRoot = '/proc') {
-  return proc.scan(procRoot).map((g) => ({
-    appId: g.steamAppId,
-    pid: g.pid,
-    exe: g.exe,
-    runner: g.runner,
-    winePrefix: g.winePrefix,
-    name: (g.steamAppId && KNOWN_GAMES[g.steamAppId]?.name) || null,
-  }));
+  const out = [];
+  const taken = new Set();
+  const wine = owGames.running(WINE_GAMES.map(([, g]) => g.overwolfGameId), procRoot);
+  for (const [key, g] of WINE_GAMES) {
+    const p = wine.find((w) => w.classId === g.overwolfGameId);
+    if (!p) continue;
+    out.push({ appId: key, pid: p.pid, exe: p.cmdline[0].split(/[\\/]/).pop(), runner: p.runner, winePrefix: p.winePrefix, name: g.name });
+    taken.add(p.pid);
+    // Its launcher (e.g. Battle.net) shares the non-Steam shortcut's id.
+    if (p.steamAppId) taken.add(`steam:${p.steamAppId}`);
+  }
+  for (const g of proc.scan(procRoot)) {
+    if (taken.has(g.pid) || (g.steamAppId && taken.has(`steam:${g.steamAppId}`))) continue;
+    out.push({
+      appId: g.steamAppId,
+      pid: g.pid,
+      exe: g.exe,
+      runner: g.runner,
+      winePrefix: g.winePrefix,
+      name: (g.steamAppId && KNOWN_GAMES[g.steamAppId]?.name) || null,
+    });
+  }
+  return out;
+}
+
+/** Keys of known non-Steam games installed in a Wine prefix Linuxwolf can find. */
+function installedWine(prefixes = owGames.candidatePrefixes()) {
+  return WINE_GAMES.filter(([, g]) => owGames.findInstall(g.overwolfGameId, prefixes)).map(([key]) => key);
 }
 
 /**
@@ -76,4 +107,4 @@ class GameWatcher {
   }
 }
 
-module.exports = { KNOWN_GAMES, installed, running, GameWatcher };
+module.exports = { KNOWN_GAMES, installed, installedWine, running, GameWatcher };

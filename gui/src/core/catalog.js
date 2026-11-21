@@ -7,10 +7,12 @@ const path = require('path');
 const paths = require('./paths');
 
 const METABOT_UID = 'iopjffpkfkhnkacicapeebfaicmffbekflfbfkmf';
+const WOW_FOREVER_MAP_UID = 'pjmcljgifdbecdpkdjjaklihmacmfjdondplefhg';
 
 /**
- * Known apps. `games` are Steam app ids the app is useful for on Linux (the
- * GUI starts the app with these games when auto-start is on).
+ * Known apps. `games` are the games the app is useful for on Linux (the GUI
+ * starts the app with these games when auto-start is on): Steam app ids, or
+ * keys of non-Steam games in games.KNOWN_GAMES.
  */
 const KNOWN_APPS = [
   {
@@ -34,6 +36,17 @@ const KNOWN_APPS = [
     source: "th.gl's release feed",
     needs: ['curl', 'python3', 'sha256sum'],
     check: 'thgl-palia-check.sh',
+  },
+  {
+    id: 'wow-forever-map',
+    name: 'WoW Forever Map',
+    kind: 'opk',
+    uid: WOW_FOREVER_MAP_UID,
+    games: ['wow-forever'],
+    description: 'Interactive map, quests, guides and an in-game minimap for World of Warcraft: Forever. Classic Overwolf app on the Linuxwolf runtime.',
+    homepage: 'https://www.overwolf.com/app/rastudio-wow_forever_map',
+    source: "Overwolf's store catalog",
+    needs: ['curl', 'python3'],
   },
 ];
 
@@ -66,8 +79,29 @@ function isAppDir(versionDir) {
   return ['resources/app.asar', 'resources/app'].some((rel) => fs.existsSync(path.join(versionDir, rel)));
 }
 
+/** manifest.json of an installed classic Overwolf app, or null. */
+function readOpkManifest(versionDir) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(versionDir, 'manifest.json'), 'utf8').replace(/^\uFEFF/, ''));
+  } catch {
+    return null;
+  }
+}
+
+/** Installed classic Overwolf apps (.opk, unpacked): Map uid -> { dir, version, versions, productName }. */
+function installedOpk(appsDir = paths.appsDir()) {
+  return installedBy(appsDir, (dir) => fs.existsSync(path.join(dir, 'manifest.json')), (dir) => readOpkManifest(dir)?.meta?.name);
+}
+
 /** Installed ow-electron apps: Map uid -> { dir, version, versions, productName }. */
 function installedOwElectron(appsDir = paths.appsDir()) {
+  return installedBy(appsDir, isAppDir, (dir) => {
+    const pkg = readAppPackage(dir) || {};
+    return pkg.productName || pkg.name;
+  });
+}
+
+function installedBy(appsDir, isInstalled, nameOf) {
   const out = new Map();
   let uids = [];
   try {
@@ -76,14 +110,13 @@ function installedOwElectron(appsDir = paths.appsDir()) {
   for (const uid of uids) {
     let versions = [];
     try {
-      versions = fs.readdirSync(path.join(appsDir, uid)).filter((v) => isAppDir(path.join(appsDir, uid, v)));
+      versions = fs.readdirSync(path.join(appsDir, uid)).filter((v) => isInstalled(path.join(appsDir, uid, v)));
     } catch {}
     if (!versions.length) continue;
     versions.sort(compareVersions);
     const version = versions[versions.length - 1];
     const dir = path.join(appsDir, uid, version);
-    const pkg = readAppPackage(dir) || {};
-    out.set(uid, { dir, version, versions, productName: pkg.productName || pkg.name || uid });
+    out.set(uid, { dir, version, versions, productName: nameOf(dir) || uid });
   }
   return out;
 }
@@ -101,16 +134,17 @@ function isExecutable(file) {
   }
 }
 
-/** All apps for the library view: known ones (installed or not) plus any other installed ow-electron app. */
+/** All apps for the library view: known ones (installed or not) plus any other installed Overwolf app. */
 function listApps(appsDir = paths.appsDir()) {
-  const ow = installedOwElectron(appsDir);
+  const installed = { 'ow-electron': installedOwElectron(appsDir), opk: installedOpk(appsDir) };
   const apps = KNOWN_APPS.map((a) => {
     const app = { ...a, installed: false, version: null, path: null };
-    if (a.kind === 'ow-electron' && ow.has(a.uid)) {
+    const ow = installed[a.kind];
+    if (ow && ow.has(a.uid)) {
       const i = ow.get(a.uid);
       Object.assign(app, { installed: true, version: i.version, path: i.dir, installDir: path.join(appsDir, a.uid) });
       ow.delete(a.uid);
-    } else if (a.kind === 'ow-electron') {
+    } else if (ow) {
       app.installDir = path.join(appsDir, a.uid);
     } else if (a.kind === 'appimage') {
       const file = thglAppImage(appsDir);
@@ -119,22 +153,25 @@ function listApps(appsDir = paths.appsDir()) {
     }
     return app;
   });
-  for (const [uid, i] of ow) {
-    apps.push({
-      id: `ow:${uid}`,
-      name: i.productName,
-      kind: 'ow-electron',
-      uid,
-      games: [],
-      description: 'ow-electron app installed from Overwolf\'s update feed. Not tested with Linuxwolf yet.',
-      source: "Overwolf's update feed",
-      needs: ['curl', 'openssl', '7z'],
-      installed: true,
-      version: i.version,
-      path: i.dir,
-      installDir: path.join(appsDir, uid),
-      custom: true,
-    });
+  for (const [kind, ow] of Object.entries(installed)) {
+    for (const [uid, i] of ow) {
+      const opk = kind === 'opk';
+      apps.push({
+        id: `ow:${uid}`,
+        name: i.productName,
+        kind,
+        uid,
+        games: [],
+        description: opk ? "Classic Overwolf app installed from Overwolf's store catalog. Not tested with Linuxwolf yet." : 'ow-electron app installed from Overwolf\'s update feed. Not tested with Linuxwolf yet.',
+        source: opk ? "Overwolf's store catalog" : "Overwolf's update feed",
+        needs: opk ? ['curl', 'python3'] : ['curl', 'openssl', '7z'],
+        installed: true,
+        version: i.version,
+        path: i.dir,
+        installDir: path.join(appsDir, uid),
+        custom: true,
+      });
+    }
   }
   return apps;
 }
@@ -142,6 +179,7 @@ function listApps(appsDir = paths.appsDir()) {
 /** Command to install (or update) an app: [file, ...args]. */
 function installCommand(app) {
   if (app.kind === 'ow-electron') return [paths.tool('fetch-ow-electron-app.sh'), app.uid];
+  if (app.kind === 'opk') return [paths.tool('fetch-opk-app.sh'), app.uid];
   if (app.id === 'thgl-companion') return [paths.tool('fetch-thgl-companion.sh')];
   return null;
 }
@@ -149,7 +187,7 @@ function installCommand(app) {
 /** Command and extra environment to start an installed app. */
 function launchCommand(app, settings = {}, env = process.env) {
   if (!app.installed) return null;
-  if (app.kind === 'ow-electron') {
+  if (app.kind === 'ow-electron' || app.kind === 'opk') {
     const extra = { LINUXWOLF_BACKEND: settings.backend || 'x11' };
     if (settings.osd && settings.osd !== 'clickthrough') extra.LINUXWOLF_OSD = settings.osd;
     if (settings.debug) extra.LINUXWOLF_DEBUG = '1';
@@ -163,4 +201,4 @@ function launchCommand(app, settings = {}, env = process.env) {
   return null;
 }
 
-module.exports = { KNOWN_APPS, METABOT_UID, compareVersions, installedOwElectron, listApps, installCommand, launchCommand, thglAppImage };
+module.exports = { KNOWN_APPS, METABOT_UID, WOW_FOREVER_MAP_UID, compareVersions, installedOwElectron, installedOpk, listApps, installCommand, launchCommand, thglAppImage };

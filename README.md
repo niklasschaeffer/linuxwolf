@@ -34,8 +34,8 @@ check your setup. See [docs/gui.md](docs/gui.md).
 | `crates/lw-detect` | Detects games running under Proton/Wine by scanning `/proc` (Steam app id, game exe, Wine prefix). `cargo run -p lw-detect -- --watch` |
 | `crates/lw-overlay-layer` | Vulkan layer that draws an overlay into a game's frames. Works for Proton games because DXVK/VKD3D present through Vulkan. Currently draws a test HUD. |
 | `crates/lw-vk-smoketest` | Headless Vulkan app that checks the layer really draws into presented images (runs on Mesa lavapipe, no GPU needed). |
-| `runtime/ow-electron` | Runs ow-electron apps (Overwolf's Electron fork, e.g. MetaBot) on stock Linux Electron: `app.overwolf`, `reg.exe`/Steam emulation, Windows-only module shims, KDE window handling. See [docs/step-2.md](docs/step-2.md). |
-| `tools/` | `fetch-thgl-companion.sh` + `thgl-palia-check.sh` (th.gl's native Linux app for Palia, see [docs/palia.md](docs/palia.md)), `fetch-ow-electron-app.sh` (installs an ow-electron app from Overwolf's feed), `metabot-smoketest.sh`, `smoketest.sh`, `install-overlay.sh`, font generator. |
+| `runtime/ow-electron` | Runs ow-electron apps (Overwolf's Electron fork, e.g. MetaBot) on stock Linux Electron: `app.overwolf`, `reg.exe`/Steam emulation, Windows-only module shims, KDE window handling. See [docs/step-2.md](docs/step-2.md). Also hosts classic Overwolf apps (`.opk`, e.g. WoW Forever Map) with an `overwolf.*` API (`src/opk/`), see [docs/wow-forever-map.md](docs/wow-forever-map.md). |
+| `tools/` | `fetch-thgl-companion.sh` + `thgl-palia-check.sh` (th.gl's native Linux app for Palia, see [docs/palia.md](docs/palia.md)), `fetch-ow-electron-app.sh` (installs an ow-electron app from Overwolf's feed), `fetch-opk-app.sh` (installs a classic app from Overwolf's store catalog), `fetch-overwolf-app.sh` (either, by uid), `metabot-smoketest.sh`, `wow-forever-smoketest.sh`, `smoketest.sh`, `install-overlay.sh`, font generator. |
 | `docs/` | Spike reports and design notes. |
 
 ## Try it from the terminal
@@ -53,6 +53,10 @@ tools/install-overlay.sh
 (cd runtime/ow-electron && npm install)
 tools/fetch-ow-electron-app.sh iopjffpkfkhnkacicapeebfaicmffbekflfbfkmf
 runtime/ow-electron/bin/linuxwolf-run ~/.local/share/linuxwolf/apps/iopjffpkfkhnkacicapeebfaicmffbekflfbfkmf/4.0.4
+
+# WoW Forever Map (classic Overwolf app) next to WoW Forever under Wine/Proton
+tools/fetch-opk-app.sh pjmcljgifdbecdpkdjjaklihmacmfjdondplefhg
+runtime/ow-electron/bin/linuxwolf-run ~/.local/share/linuxwolf/apps/pjmcljgifdbecdpkdjjaklihmacmfjdondplefhg/5.0.1
 
 # th.gl Palia map/overlay (th.gl's own native Linux app, Palia via Steam/Proton)
 tools/fetch-thgl-companion.sh

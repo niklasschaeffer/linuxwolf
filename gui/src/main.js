@@ -30,6 +30,7 @@ if (!app.requestSingleInstanceLock()) {
   let quitting = false;
   let runningGames = [];
   let installedGames = [];
+  let installedWineGames = [];
   let installedGamesAt = 0;
   let apps = [];
 
@@ -50,6 +51,7 @@ if (!app.requestSingleInstanceLock()) {
   function refreshInstalledGames(force = false) {
     if (force || Date.now() - installedGamesAt > 15000) {
       installedGames = games.installed();
+      installedWineGames = games.installedWine();
       installedGamesAt = Date.now();
     }
     return installedGames;
@@ -65,7 +67,7 @@ if (!app.requestSingleInstanceLock()) {
         pid: procs.get(appKey(a.id))?.pid ?? null,
         autoStart: Boolean(settings.autoStart[a.id]),
         gameNames: a.games.map((id) => installedGames.find((g) => g.appId === id)?.name || games.KNOWN_GAMES[id]?.name || `Steam ${id}`),
-        gamesInstalled: a.games.filter((id) => installedGames.some((g) => g.appId === id)),
+        gamesInstalled: a.games.filter((id) => installedGames.some((g) => g.appId === id) || installedWineGames.includes(id)),
         task: procs.get(`install:${a.id}`)?.running ? 'installing' : procs.get(`check:${a.id}`)?.running ? 'checking' : null,
       })),
       games: {
@@ -137,7 +139,7 @@ if (!app.requestSingleInstanceLock()) {
   function addByUid(uid) {
     uid = String(uid || '').trim().toLowerCase();
     if (!/^[a-z]{40}$/.test(uid)) throw new Error('An Overwolf app id has 40 letters a-z.');
-    runTask(`install:ow:${uid}`, `Install ${uid}`, [paths.tool('fetch-ow-electron-app.sh'), uid], (code) => {
+    runTask(`install:ow:${uid}`, `Install ${uid}`, [paths.tool('fetch-overwolf-app.sh'), uid], (code) => {
       refreshApps();
       notify('Linuxwolf', code === 0 ? 'App installed.' : 'Install failed. See Activity.');
       pushState();
