@@ -85,6 +85,7 @@ globalThis.__linuxwolf = { version: require('../package.json').version, steam, r
 require('./compat').install(uid, appRoot);
 require('./overwolf').install(app, { uid });
 require('./windows').install(app, BrowserWindow);
+require('./protocol').install(app, { uid, appRoot, launchPath: path.resolve(lwOpt('app')), productName });
 
 // Node's fetch() ignores HTTP(S)_PROXY. Desktop users behind a proxy expect
 // the app to use it, so route undici (fetch's engine) through the env proxy.
