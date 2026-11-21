@@ -121,3 +121,25 @@ test('WoW Forever is found under Wine, Proton and on disk', () => {
   const pfx = fakePrefix(root);
   assert.deepStrictEqual(games.findInstall(28268, [path.join(root, 'none'), pfx]), { prefix: pfx, exePath: 'C:\\Program Files (x86)\\World of Warcraft\\_forever_\\Wow.exe' });
 });
+
+test('game frames from the Vulkan layer: request, wait, BGRA -> RGBA', async () => {
+  const { layerFrame, parseFrame } = require('../src/opk/capture');
+  const dir = tmpdir();
+  assert.strictEqual(await layerFrame('wow.exe', { dir, timeoutMs: 100 }), null, 'no layer, no frame');
+  fs.writeFileSync(path.join(dir, 'wow.exe.layer'), '2 1\n');
+  // Stand-in for the layer: answer the request with a 2x1 BGRA frame.
+  const watcher = setInterval(() => {
+    if (!fs.existsSync(path.join(dir, 'wow.exe.req'))) return;
+    clearInterval(watcher);
+    const head = Buffer.alloc(24);
+    head.write('LWFRAME1', 0, 'latin1');
+    head.writeUInt32LE(2, 8);
+    head.writeUInt32LE(1, 12);
+    head.writeUInt32LE(0, 16);
+    fs.writeFileSync(path.join(dir, 'wow.exe.frame'), Buffer.concat([head, Buffer.from([3, 2, 1, 255, 30, 20, 10, 255])]));
+  }, 10);
+  const f = await layerFrame('wow.exe', { dir, timeoutMs: 1000 });
+  clearInterval(watcher);
+  assert.deepStrictEqual([f.width, f.height, [...f.rgba]], [2, 1, [1, 2, 3, 255, 10, 20, 30, 255]]);
+  assert.strictEqual(parseFrame(Buffer.from('nonsense')), null);
+});
