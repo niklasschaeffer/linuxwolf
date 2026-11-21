@@ -79,7 +79,7 @@ Module._load = function (request, parent, isMain) {
   return origLoad.call(this, request, parent, isMain);
 };
 
-globalThis.__linuxwolf = { version: require('../package.json').version, steam, registry };
+globalThis.__linuxwolf = { version: require('../package.json').version, steam, registry, inertWindow: require('./windows').inertWindow };
 
 // 3. App-specific compatibility patches, app.overwolf, window handling.
 require('./compat').install(uid, appRoot);
