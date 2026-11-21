@@ -23,6 +23,7 @@ class GameCapture {
     this.buffers = new Set();
     this.seq = 0;
     this.warned = false;
+    this.waylandSession = process.env.XDG_SESSION_TYPE === 'wayland' || Boolean(process.env.WAYLAND_DISPLAY);
   }
 
   create() {
@@ -48,13 +49,20 @@ class GameCapture {
     try {
       const wins = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: full, fetchWindowIcons: false });
       src = wins.find((s) => titleRe.test(s.name));
-      if (!src) {
+      // On a Wayland session a whole-screen capture goes through the
+      // screencast portal, which asks the user every time ("Bildschirm
+      // freigeben"). Never do that from a 2-second poll.
+      if (!src && !this.waylandSession) {
         const screens = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: full });
         src = screens.find((s) => String(s.display_id) === String(d.id)) || screens[0];
-        if (src && !this.warned) {
-          this.warned = true;
-          this.log(`[capture] no window titled like ${titleRe} found, capturing the whole screen instead`);
-        }
+      }
+      if (!src && !this.warned) {
+        this.warned = true;
+        this.log(
+          this.waylandSession
+            ? `[capture] the game window (${titleRe}) is not an X11/XWayland window; run the game under XWayland (e.g. Proton without its Wayland driver) for screenshots`
+            : `[capture] no window titled like ${titleRe} found, capturing the whole screen instead`,
+        );
       }
     } catch (e) {
       return { success: false, error: `capture failed: ${e.message}` };

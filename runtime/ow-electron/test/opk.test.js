@@ -108,6 +108,16 @@ test('WoW Forever is found under Wine, Proton and on disk', () => {
   assert.strictEqual(games.running([28268], proc2)[0].pid, 11);
   assert.strictEqual(games.running([28268], proc2)[0].winePrefix, '/c/1/pfx');
 
+  // Two clients: the newer one (later start time) wins, whatever the pids.
+  const proc3 = path.join(root, 'proc3');
+  const wow = ['C:\\Program Files (x86)\\World of Warcraft\\_forever_\\Wow.exe'];
+  fakeProc(proc3, 900, wow, { WINEPREFIX: '/p' });
+  fakeProc(proc3, 120, wow, { WINEPREFIX: '/p' });
+  const stat = (pid, start) => fs.writeFileSync(path.join(proc3, String(pid), 'stat'), `${pid} (Wow.exe) S ${'1 '.repeat(18)}${start} 0 0`);
+  stat(900, 1000);
+  stat(120, 5000);
+  assert.strictEqual(games.running([28268], proc3)[0].pid, 120);
+
   const pfx = fakePrefix(root);
   assert.deepStrictEqual(games.findInstall(28268, [path.join(root, 'none'), pfx]), { prefix: pfx, exePath: 'C:\\Program Files (x86)\\World of Warcraft\\_forever_\\Wow.exe' });
 });
