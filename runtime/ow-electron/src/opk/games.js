@@ -35,6 +35,18 @@ function matches(def, p) {
   return !def.pathIncludes || exePath(p).toLowerCase().includes(def.pathIncludes.toLowerCase());
 }
 
+/** Process start time in clock ticks since boot (field 22 of /proc/<pid>/stat), 0 if unknown. */
+function startTime(procRoot, pid) {
+  try {
+    const stat = fs.readFileSync(path.join(procRoot, String(pid), 'stat'), 'utf8');
+    // The command name (field 2) can contain spaces and parentheses.
+    const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+    return Number(fields[19]) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 /** Running games among `classIds`: [{ classId, title, pid, exePath, winePrefix, runner, steamAppId }]. */
 function running(classIds, procRoot = '/proc') {
   const procs = proc.scanAll(procRoot);
@@ -42,7 +54,8 @@ function running(classIds, procRoot = '/proc') {
   for (const classId of classIds) {
     const def = OW_GAMES[classId];
     if (!def) continue;
-    const p = procs.find((x) => matches(def, x));
+    // Newest first: a hung or leftover client must not hide the one being played.
+    const p = procs.filter((x) => matches(def, x)).sort((a, b) => startTime(procRoot, b.pid) - startTime(procRoot, a.pid) || b.pid - a.pid)[0];
     if (p) out.push({ classId, title: def.title, pid: p.pid, exePath: exePath(p), winePrefix: p.winePrefix, runner: p.runner, steamAppId: p.steamAppId, cmdline: p.cmdline });
   }
   return out;

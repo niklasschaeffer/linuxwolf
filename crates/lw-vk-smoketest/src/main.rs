@@ -155,9 +155,27 @@ unsafe fn run() {
         if bgra { [p[2], p[1], p[0]] } else { [p[0], p[1], p[2]] }
     };
 
+    // Frame export (crates/lw-overlay-layer/src/capture.rs): ask for a frame
+    // halfway through, like a Linuxwolf app does.
+    let exe = std::env::current_exe().unwrap();
+    let key = exe.file_name().unwrap().to_string_lossy().to_lowercase();
+    let cap_dir = std::path::Path::new("/dev/shm/linuxwolf-capture");
+    let frame_file = cap_dir.join(format!("{key}.frame"));
+    let _ = std::fs::remove_file(&frame_file);
+    let mut last_outside = [0u8; 3];
+
     let mut checked = 0;
     let mut hud_seen = 0;
     for frame in 0..FRAMES {
+        if frame == FRAMES / 2 {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            std::fs::create_dir_all(cap_dir).unwrap();
+            std::fs::write(cap_dir.join(format!("{key}.req")), b"").unwrap();
+        }
+        if frame >= FRAMES / 2 && frame < FRAMES / 2 + 3 {
+            // Let the layer's 100 ms request check come round.
+            std::thread::sleep(std::time::Duration::from_millis(60));
+        }
         let (idx, _) = swapchain_fn.acquire_next_image(swapchain, u64::MAX, vk::Semaphore::null(), acquire_fence).unwrap();
         device.wait_for_fences(&[acquire_fence], true, u64::MAX).unwrap();
         device.reset_fences(&[acquire_fence]).unwrap();
@@ -194,6 +212,7 @@ unsafe fn run() {
             let border = pixel(HUD_X, HUD_Y);
             let inside = pixel(HUD_X + 200, HUD_Y + 40);
             let outside = pixel(extent.width - 10, extent.height - 10);
+            last_outside = outside;
             let hud_ok = border == HUD_ACCENT && inside == HUD_BG;
             if hud_ok {
                 hud_seen += 1;
@@ -225,8 +244,32 @@ unsafe fn run() {
     }
 
     println!("checked {checked} presented images, HUD found in {hud_seen}");
+
+    // The exported frame must be the presented image: clear colour and HUD.
+    let export_ok = match std::fs::read(&frame_file) {
+        Ok(data) if data.len() >= 24 && &data[..8] == b"LWFRAME1" => {
+            let u = |o: usize| u32::from_le_bytes(data[o..o + 4].try_into().unwrap());
+            let (w, h, rgba) = (u(8), u(12), u(16) == 1);
+            let px = |x: u32, y: u32| -> [u8; 3] {
+                let i = 24 + ((y * w + x) * 4) as usize;
+                let p = &data[i..i + 4];
+                if rgba { [p[0], p[1], p[2]] } else { [p[2], p[1], p[0]] }
+            };
+            let ok = w == extent.width
+                && h == extent.height
+                && data.len() == 24 + (w * h * 4) as usize
+                && px(w - 10, h - 10) == last_outside
+                && px(HUD_X, HUD_Y) == HUD_ACCENT;
+            println!("exported frame {w}x{h} rgba={rgba}: outside {:02x?} hud {:02x?} ok={ok}", px(w - 10, h - 10), px(HUD_X, HUD_Y));
+            ok
+        }
+        _ => {
+            println!("no exported frame at {}", frame_file.display());
+            false
+        }
+    };
     device.destroy_swapchain_khr_cleanup(&swapchain_fn, swapchain);
-    std::process::exit(if checked > 0 && hud_seen == checked { 0 } else { 1 });
+    std::process::exit(if checked > 0 && hud_seen == checked && export_ok { 0 } else { 1 });
 }
 
 trait Cleanup {

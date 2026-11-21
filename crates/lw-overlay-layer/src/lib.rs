@@ -17,13 +17,16 @@
 //! later a blend pass replaces the plain copy to get transparency.
 //!
 //! Enable per game with the Steam launch option
-//! `LINUXWOLF_OVERLAY=1 %command%`.
+//! `LINUXWOLF_OVERLAY=1 %command%`. `LINUXWOLF_OVERLAY_HUD=0` turns the test
+//! HUD off and keeps only the frame export for Linuxwolf apps (see
+//! `capture.rs`; `LINUXWOLF_CAPTURE=0` turns that off).
 
 #![allow(clippy::missing_safety_doc, clippy::missing_transmute_annotations, non_snake_case)]
 // Spike: most Vulkan results on the hot path are best effort; failures fall
 // back to presenting without the overlay.
 #![allow(unused_must_use)]
 
+mod capture;
 mod font;
 pub mod hud;
 
@@ -152,6 +155,7 @@ struct DeviceFns {
     reset_command_buffer: vk::PFN_vkResetCommandBuffer,
     cmd_pipeline_barrier: vk::PFN_vkCmdPipelineBarrier,
     cmd_copy_buffer_to_image: vk::PFN_vkCmdCopyBufferToImage,
+    cmd_copy_image_to_buffer: vk::PFN_vkCmdCopyImageToBuffer,
     create_fence: vk::PFN_vkCreateFence,
     destroy_fence: vk::PFN_vkDestroyFence,
     wait_for_fences: vk::PFN_vkWaitForFences,
@@ -187,6 +191,7 @@ struct Slot {
     buffer: vk::Buffer,
     memory: vk::DeviceMemory,
     mapped: *mut u8,
+    size: u64,
 }
 
 struct SwapchainData {
@@ -194,6 +199,9 @@ struct SwapchainData {
     images: Vec<vk::Image>,
     extent: vk::Extent2D,
     order: Option<hud::PixelOrder>,
+    /// Pixel order when the images can be read back (TRANSFER_SRC).
+    capture_order: Option<hud::PixelOrder>,
+    capture_slot: Option<Slot>,
     slots: Vec<Option<Slot>>,
     frames: u64,
     fps: f32,
@@ -208,6 +216,7 @@ struct State {
     /// queue handle -> (device key, queue family)
     queues: HashMap<u64, (usize, u32)>,
     swapchains: HashMap<u64, SwapchainData>,
+    requests: Option<capture::Requests>,
 }
 
 // Raw pointers in Slot are only touched while holding the lock.
@@ -221,6 +230,10 @@ fn state() -> MutexGuard<'static, Option<State>> {
         *g = Some(State::default());
     }
     g
+}
+
+fn hud_enabled() -> bool {
+    std::env::var("LINUXWOLF_OVERLAY_HUD").as_deref() != Ok("0")
 }
 
 fn log(msg: &str) {
@@ -444,6 +457,7 @@ unsafe extern "system" fn create_device(
         reset_command_buffer: load!(gdpa, device, "vkResetCommandBuffer"),
         cmd_pipeline_barrier: load!(gdpa, device, "vkCmdPipelineBarrier"),
         cmd_copy_buffer_to_image: load!(gdpa, device, "vkCmdCopyBufferToImage"),
+        cmd_copy_image_to_buffer: load!(gdpa, device, "vkCmdCopyImageToBuffer"),
         create_fence: load!(gdpa, device, "vkCreateFence"),
         destroy_fence: load!(gdpa, device, "vkDestroyFence"),
         wait_for_fences: load!(gdpa, device, "vkWaitForFences"),
@@ -554,22 +568,24 @@ unsafe extern "system" fn create_swapchain(
         return vk::Result::ERROR_INITIALIZATION_FAILED;
     };
     let mut info = *ci;
-    let mut can_draw = pixel_order(info.image_format).is_some();
-    if can_draw {
+    let known_format = pixel_order(info.image_format).is_some();
+    let mut usage = vk::ImageUsageFlags::empty();
+    if known_format {
         let caps_fn = st.instances.get(&dev.instance_key).and_then(|i| i.get_surface_capabilities);
         let mut caps = vk::SurfaceCapabilitiesKHR::default();
-        let supported = match caps_fn {
-            Some(f) => {
-                f(dev.physical_device, info.surface, &mut caps) == vk::Result::SUCCESS
-                    && caps.supported_usage_flags.contains(vk::ImageUsageFlags::TRANSFER_DST)
+        if let Some(f) = caps_fn {
+            if f(dev.physical_device, info.surface, &mut caps) == vk::Result::SUCCESS {
+                usage = caps.supported_usage_flags;
             }
-            None => false,
-        };
-        if supported {
-            info.image_usage |= vk::ImageUsageFlags::TRANSFER_DST;
-        } else {
-            can_draw = false;
         }
+    }
+    let can_draw = known_format && hud_enabled() && usage.contains(vk::ImageUsageFlags::TRANSFER_DST);
+    let can_capture = known_format && usage.contains(vk::ImageUsageFlags::TRANSFER_SRC);
+    if can_draw {
+        info.image_usage |= vk::ImageUsageFlags::TRANSFER_DST;
+    }
+    if can_capture {
+        info.image_usage |= vk::ImageUsageFlags::TRANSFER_SRC;
     }
     let r = (dev.fns.create_swapchain)(device, &info, alloc, out);
     if r != vk::Result::SUCCESS {
@@ -580,13 +596,19 @@ unsafe extern "system" fn create_swapchain(
     let mut images = vec![vk::Image::null(); count as usize];
     (dev.fns.get_swapchain_images)(device, *out, &mut count, images.as_mut_ptr());
     log(&format!(
-        "swapchain {}x{} {:?}, {} images, overlay {}",
+        "swapchain {}x{} {:?}, {} images, overlay {}, frame export {}",
         info.image_extent.width,
         info.image_extent.height,
         info.image_format,
         count,
-        if can_draw { "on" } else { "off (unsupported format or usage)" }
+        if can_draw { "on" } else { "off" },
+        if can_capture { "on" } else { "off" }
     ));
+    if can_capture {
+        st.requests
+            .get_or_insert_with(capture::Requests::new)
+            .announce(info.image_extent.width, info.image_extent.height);
+    }
     st.swapchains.insert(
         (*out).as_raw(),
         SwapchainData {
@@ -595,6 +617,8 @@ unsafe extern "system" fn create_swapchain(
             images,
             extent: info.image_extent,
             order: if can_draw { pixel_order(info.image_format) } else { None },
+            capture_order: if can_capture { pixel_order(info.image_format) } else { None },
+            capture_slot: None,
             frames: 0,
             fps: 0.0,
             fps_window_start: Instant::now(),
@@ -618,6 +642,9 @@ unsafe fn free_slot(dev: &DeviceData, slot: Slot) {
 
 unsafe fn free_slots(dev: &DeviceData, sc: &mut SwapchainData) {
     for slot in sc.slots.iter_mut().filter_map(Option::take) {
+        free_slot(dev, slot);
+    }
+    if let Some(slot) = sc.capture_slot.take() {
         free_slot(dev, slot);
     }
 }
@@ -649,7 +676,7 @@ unsafe fn find_memory_type(dev: &DeviceData, bits: u32, flags: vk::MemoryPropert
         .find(|i| bits & (1 << i) != 0 && props.memory_types[*i as usize].property_flags.contains(flags))
 }
 
-unsafe fn create_slot(dev: &mut DeviceData, family: u32) -> Option<Slot> {
+unsafe fn create_slot(dev: &mut DeviceData, family: u32, size: u64, usage: vk::BufferUsageFlags) -> Option<Slot> {
     let d = dev.device;
     let pool = match dev.pools.get(&family) {
         Some(p) => *p,
@@ -687,10 +714,9 @@ unsafe fn create_slot(dev: &mut DeviceData, family: u32) -> Option<Slot> {
     let mut semaphore = vk::Semaphore::null();
     (dev.fns.create_semaphore)(d, &vk::SemaphoreCreateInfo::default(), ptr::null(), &mut semaphore);
 
-    let size = (hud::HUD_W * hud::HUD_H * 4) as u64;
     let buf_info = vk::BufferCreateInfo::default()
         .size(size)
-        .usage(vk::BufferUsageFlags::TRANSFER_SRC)
+        .usage(usage)
         .sharing_mode(vk::SharingMode::EXCLUSIVE);
     let mut buffer = vk::Buffer::null();
     (dev.fns.create_buffer)(d, &buf_info, ptr::null(), &mut buffer);
@@ -709,7 +735,10 @@ unsafe fn create_slot(dev: &mut DeviceData, family: u32) -> Option<Slot> {
     (dev.fns.bind_buffer_memory)(d, buffer, memory, 0);
     let mut mapped: *mut c_void = ptr::null_mut();
     (dev.fns.map_memory)(d, memory, 0, size, vk::MemoryMapFlags::empty(), &mut mapped);
-    Some(Slot { family, cmd, fence, semaphore, buffer, memory, mapped: mapped as *mut u8 })
+    if mapped.is_null() {
+        return None;
+    }
+    Some(Slot { family, cmd, fence, semaphore, buffer, memory, mapped: mapped as *mut u8, size })
 }
 
 /// Records and submits the HUD copy for one swapchain image. Returns the
@@ -734,7 +763,7 @@ unsafe fn draw_hud(
         free_slot(dev, sc.slots[idx].take().unwrap());
     }
     if sc.slots[idx].is_none() {
-        sc.slots[idx] = Some(create_slot(dev, family)?);
+        sc.slots[idx] = Some(create_slot(dev, family, (hud::HUD_W * hud::HUD_H * 4) as u64, vk::BufferUsageFlags::TRANSFER_SRC)?);
     }
     let slot = sc.slots[idx].as_ref().unwrap();
     let d = dev.device;
@@ -846,6 +875,130 @@ unsafe fn draw_hud(
     Some(slot.semaphore)
 }
 
+/// Copies the presented image to the CPU and writes it for the app that asked
+/// (capture.rs). Waits for the copy, so the game stalls for one copy every
+/// time an app asks (WoW Forever Map: every ~2.5 s). Returns the semaphore
+/// the present must wait on.
+unsafe fn capture_frame(
+    dev: &mut DeviceData,
+    sc: &mut SwapchainData,
+    requests: &mut capture::Requests,
+    queue: vk::Queue,
+    family: u32,
+    image_index: u32,
+    wait: &[vk::Semaphore],
+) -> Option<vk::Semaphore> {
+    let order = sc.capture_order?;
+    let flags = *dev.queue_family_flags.get(family as usize)?;
+    if !flags.intersects(vk::QueueFlags::GRAPHICS | vk::QueueFlags::COMPUTE | vk::QueueFlags::TRANSFER) {
+        return None;
+    }
+    let image = *sc.images.get(image_index as usize)?;
+    let (w, h) = (sc.extent.width, sc.extent.height);
+    let size = w as u64 * h as u64 * 4;
+    if sc.capture_slot.as_ref().is_some_and(|s| s.family != family || s.size != size) {
+        free_slot(dev, sc.capture_slot.take().unwrap());
+    }
+    if sc.capture_slot.is_none() {
+        sc.capture_slot = Some(create_slot(dev, family, size, vk::BufferUsageFlags::TRANSFER_DST)?);
+    }
+    let slot = sc.capture_slot.as_ref().unwrap();
+    let d = dev.device;
+    let f = &dev.fns;
+    (f.wait_for_fences)(d, 1, &slot.fence, vk::TRUE, u64::MAX);
+    (f.reset_fences)(d, 1, &slot.fence);
+
+    let cmd = slot.cmd;
+    (f.reset_command_buffer)(cmd, vk::CommandBufferResetFlags::empty());
+    let begin = vk::CommandBufferBeginInfo::default().flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+    (f.begin_command_buffer)(cmd, &begin);
+    let range = vk::ImageSubresourceRange::default()
+        .aspect_mask(vk::ImageAspectFlags::COLOR)
+        .level_count(1)
+        .layer_count(1);
+    let to_src = vk::ImageMemoryBarrier::default()
+        .src_access_mask(vk::AccessFlags::MEMORY_WRITE)
+        .dst_access_mask(vk::AccessFlags::TRANSFER_READ)
+        .old_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+        .new_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+        .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+        .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+        .image(image)
+        .subresource_range(range);
+    (f.cmd_pipeline_barrier)(
+        cmd,
+        vk::PipelineStageFlags::ALL_COMMANDS,
+        vk::PipelineStageFlags::TRANSFER,
+        vk::DependencyFlags::empty(),
+        0,
+        ptr::null(),
+        0,
+        ptr::null(),
+        1,
+        &to_src,
+    );
+    let region = vk::BufferImageCopy::default()
+        .buffer_offset(0)
+        .buffer_row_length(w)
+        .buffer_image_height(h)
+        .image_subresource(
+            vk::ImageSubresourceLayers::default().aspect_mask(vk::ImageAspectFlags::COLOR).layer_count(1),
+        )
+        .image_extent(vk::Extent3D { width: w, height: h, depth: 1 });
+    (f.cmd_copy_image_to_buffer)(cmd, image, vk::ImageLayout::TRANSFER_SRC_OPTIMAL, slot.buffer, 1, &region);
+    let to_present = vk::ImageMemoryBarrier::default()
+        .src_access_mask(vk::AccessFlags::TRANSFER_READ)
+        .dst_access_mask(vk::AccessFlags::empty())
+        .old_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+        .new_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+        .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+        .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+        .image(image)
+        .subresource_range(range);
+    let to_host = vk::BufferMemoryBarrier::default()
+        .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+        .dst_access_mask(vk::AccessFlags::HOST_READ)
+        .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+        .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+        .buffer(slot.buffer)
+        .offset(0)
+        .size(vk::WHOLE_SIZE);
+    (f.cmd_pipeline_barrier)(
+        cmd,
+        vk::PipelineStageFlags::TRANSFER,
+        vk::PipelineStageFlags::BOTTOM_OF_PIPE | vk::PipelineStageFlags::HOST,
+        vk::DependencyFlags::empty(),
+        0,
+        ptr::null(),
+        1,
+        &to_host,
+        1,
+        &to_present,
+    );
+    (f.end_command_buffer)(cmd);
+
+    let stages = vec![vk::PipelineStageFlags::TRANSFER; wait.len()];
+    let submit = vk::SubmitInfo {
+        wait_semaphore_count: wait.len() as u32,
+        p_wait_semaphores: wait.as_ptr(),
+        p_wait_dst_stage_mask: stages.as_ptr(),
+        command_buffer_count: 1,
+        p_command_buffers: &cmd,
+        signal_semaphore_count: 1,
+        p_signal_semaphores: &slot.semaphore,
+        ..Default::default()
+    };
+    if (f.queue_submit)(queue, 1, &submit, slot.fence) != vk::Result::SUCCESS {
+        return None;
+    }
+    // Wait for the copy (at most 1 s), then hand the frame out.
+    if (f.wait_for_fences)(d, 1, &slot.fence, vk::TRUE, 1_000_000_000) == vk::Result::SUCCESS {
+        let pixels = std::slice::from_raw_parts(slot.mapped, size as usize);
+        requests.serve(w, h, matches!(order, hud::PixelOrder::Rgba), pixels);
+    }
+    Some(slot.semaphore)
+}
+
 unsafe extern "system" fn queue_present(queue: vk::Queue, info: *const vk::PresentInfoKHR) -> vk::Result {
     let mut g = state();
     let st = g.as_mut().unwrap();
@@ -874,6 +1027,17 @@ unsafe extern "system" fn queue_present(queue: vk::Queue, info: *const vk::Prese
             if let Some(sc) = st.swapchains.get_mut(&sc_handle.as_raw()) {
                 let dev = st.devices.get_mut(&dev_key).unwrap();
                 replacement = draw_hud(dev, sc, queue, family, image_index, wait);
+                let requests = st.requests.get_or_insert_with(capture::Requests::new);
+                if sc.capture_order.is_some() && requests.pending() {
+                    let hud_sem = replacement.map(|s| [s]);
+                    let wait2: &[vk::Semaphore] = match &hud_sem {
+                        Some(a) => a,
+                        None => wait,
+                    };
+                    if let Some(sem) = capture_frame(dev, sc, requests, queue, family, image_index, wait2) {
+                        replacement = Some(sem);
+                    }
+                }
             }
         }
     }

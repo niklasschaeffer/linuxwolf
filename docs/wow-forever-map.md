@@ -57,7 +57,7 @@ Read from the bundle (`assets/*.js`):
 | windows | Electron windows from the manifest, frameless, transparent where the manifest says so. In-game windows are always-on-top windows on the game's screen (positions relative to it), hidden when the game exits. Drag move/resize follows the pointer. `InputPassThrough` = click-through (and KDE's on-screen-display layer, see [step-2.md](step-2.md#windows-always-on-top-and-hotkeys-on-kde)). |
 | games | WoW Forever found in `/proc`: a Wine/Proton process `Wow.exe` under `\_forever_\`. Works for Lutris/Bottles/plain Wine and for WoW added to Steam as a non-Steam game with Proton. `getGameInfo` also finds the install when the game is not running (Wine prefixes in `~/Games/*`, `~/.wine`, Bottles, Steam `compatdata`, or `LINUXWOLF_WINEPREFIX`). |
 | io | Windows paths mapped into the game's Wine prefix (`C:\` via `dosdevices`, `Z:\` = `/`), case-insensitive like Windows. `io.paths` (localAppData, documents, ...) point to a per-app drive `L:\` = `~/.local/share/linuxwolf/opk-data/<uid>/`, so app data never lands in the game prefix. |
-| media.createScreenshotBuffer | Frame of the game window via Electron's desktopCapturer (XComposite on X11/XWayland, no portal dialog), handed out as RGBA like Overwolf. Off on the native Wayland backend. |
+| media.createScreenshotBuffer | Game frames as RGBA, like Overwolf. First choice: the **Linuxwolf Vulkan layer** copies a presented frame to `/dev/shm/linuxwolf-capture/` on request (works for native-Wayland game windows too, no dialog). Fallback: the game's X11/XWayland window via Electron's desktopCapturer. Never a whole-screen capture on a Wayland session (that would open KDE's "share screen" dialog on every call). |
 | settings.hotkeys | Electron global shortcuts (X11 key grabs, work while the Wine game has focus), active only while the game runs, rebinding saved per app. |
 | os.tray, utils, extensions | Tray icon and menu, monitors, clipboard, open links in the default browser, manifest, launch events. |
 | games.events (game events) | **Not available.** Overwolf's game events provider is closed. The app checks for it and carries on without. |
@@ -79,6 +79,10 @@ install and a fake `Wow.exe` process (`tools/wow-forever-smoketest.sh`):
   (`overlay_map`) appears in the bottom right corner over the game.
 - Linuxwolf desktop app: "WoW Forever Map" in the Library (install, update,
   start, "With game"), WoW Forever shows as installed and as running.
+
+Frame export of the layer: `tools/smoketest.sh` (lavapipe, with the
+Khronos validation layer) asks for a frame halfway and checks that the
+exported frame is the presented image (clear colour and HUD pixels).
 
 Not tested: a real WoW Forever client, a real Plasma desktop (stacking of
 the overlay windows over a fullscreen game, see below), the position
@@ -103,8 +107,18 @@ Notes for the game side:
 - Use **borderless windowed** in WoW. KWin puts a focused fullscreen window
   above "keep above" windows, so the minimap and the in-game window may end
   up behind a true fullscreen game.
-- Keep the default X11/XWayland backend for this app (screenshots for live
-  position and hotkeys need it).
+- **Live position** needs game frames. Install the Vulkan layer once
+  (`tools/install-overlay.sh`, or the Overlay page of the desktop app) and
+  start WoW with the environment variables
+  `LINUXWOLF_OVERLAY=1 LINUXWOLF_OVERLAY_HUD=0` (Heroic: game settings →
+  Advanced → environment variables; Lutris: System options → environment
+  variables). The layer then hands frames to the app and draws nothing
+  (without `LINUXWOLF_OVERLAY_HUD=0` you also see its test HUD). The app
+  log says `[capture] frames from the Linuxwolf Vulkan layer` once it
+  works. Without the layer, frames only come from an XWayland game window
+  (Proton without its Wayland driver).
+- Taking a frame stalls the game for one GPU copy every ~2.5 s.
+- Keep the default X11/XWayland backend for this app (hotkeys need it).
 - Nothing touches the game process: the app writes its addon into the WoW
   folder and reads files and screenshots, the same as on Windows.
 
