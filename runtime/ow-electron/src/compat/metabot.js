@@ -55,6 +55,26 @@ module.exports = {
         },
         expect: 'one',
       },
+      {
+        // Without ow-electron's overlay package MetaBot still creates its
+        // in-game overlay window, as a plain 800x600 transparent window in
+        // the middle of the screen, visible right away and not click-through
+        // (Electron on Linux has no `forward` for setIgnoreMouseEvents).
+        // It cannot draw over the game without the package, but it takes
+        // mouse input and stacking from the game under KWin; with the
+        // "Alle In-Game Overlays" setting on, the game stops responding.
+        // Create it hidden and keep it hidden and inert.
+        id: 'overlay-fallback-window',
+        find: /name:"metabot-overlay-window",/g,
+        replace: 'name:"metabot-overlay-window",show:false,',
+        expect: 'one',
+      },
+      {
+        id: 'overlay-fallback-inert',
+        find: /([\w$]+)\("overlay-fallback",([\w$]+)\)/g,
+        replace: '(globalThis.__linuxwolf&&globalThis.__linuxwolf.inertWindow($2,"metabot-overlay-window"),$1("overlay-fallback",$2))',
+        expect: 'one',
+      },
     ],
   },
 };

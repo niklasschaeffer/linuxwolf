@@ -87,6 +87,29 @@ for (const w of list) {
   log(`[windows] KWin keepAbove requested for "${title}"`);
 }
 
+function inertWindow(win, label = win.getTitle()) {
+  if (!win || win.isDestroyed()) return win;
+  const noop = function () {};
+  win.show = noop;
+  win.showInactive = noop;
+  win.focus = noop;
+  win.moveTop = noop;
+  win.setFocusable = noop;
+  win.setIgnoreMouseEvents = noop;
+  win.setAlwaysOnTop = noop;
+  try {
+    win.hide();
+    win.blur();
+    win.setSkipTaskbar(true);
+    win.constructor.prototype.setFocusable.call(win, false);
+    win.constructor.prototype.setIgnoreMouseEvents.call(win, true);
+  } catch (e) {
+    log(`[windows] ${label}: ${e.message}`);
+  }
+  log(`[windows] ${label}: kept hidden (no ow-electron overlay on Linux)`);
+  return win;
+}
+
 function install(app, BrowserWindow) {
   const mode = backend(app);
   // Which screen-saver windows go to KWin's on-screen-display layer:
@@ -132,4 +155,4 @@ function install(app, BrowserWindow) {
   return mode;
 }
 
-module.exports = { install, backend };
+module.exports = { install, backend, inertWindow };
