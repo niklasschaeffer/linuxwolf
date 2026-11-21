@@ -306,11 +306,15 @@ if (!app.requestSingleInstanceLock()) {
       return shell.openExternal(url);
     },
   };
+  // Calls that change nothing must not announce a change: the page answers
+  // "changed" with state:get, so that would loop and redraw the page
+  // nonstop, swallowing clicks that land between mousedown and mouseup.
+  const READ_ONLY = new Set(['state:get', 'process:log', 'process:openLog', 'app:openFolder', 'clipboard:write', 'open:url']);
   for (const [ch, fn] of Object.entries(handlers)) {
     ipcMain.handle(`lw:${ch}`, async (_e, ...args) => {
       try {
         const value = await fn(...args);
-        pushState();
+        if (!READ_ONLY.has(ch)) pushState();
         return { ok: true, value };
       } catch (e) {
         return { ok: false, error: e.message };
