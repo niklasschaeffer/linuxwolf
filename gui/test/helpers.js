@@ -15,4 +15,12 @@ function fakeOwApp(appsDir, uid, version, pkg) {
   return path.join(appsDir, uid, version);
 }
 
-module.exports = { tmpdir, fakeOwApp };
+/** Installed classic Overwolf app (unpacked .opk with manifest.json). */
+function fakeOpkApp(appsDir, uid, version, name) {
+  const dir = path.join(appsDir, uid, version);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ manifest_version: 1, type: 'WebApp', meta: { name, version } }));
+  return dir;
+}
+
+module.exports = { tmpdir, fakeOwApp, fakeOpkApp };

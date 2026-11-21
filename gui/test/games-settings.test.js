@@ -32,6 +32,16 @@ test('installed games come with names from the app manifests, tools are left out
   }
 });
 
+test('WoW Forever under Wine or as a non-Steam game is a known game', () => {
+  const proc = tmpdir();
+  rt.fakeProc(proc, 10, ['C:\\Program Files (x86)\\Battle.net\\Battle.net.exe'], { SteamGameId: '3000000001', STEAM_COMPAT_DATA_PATH: '/c/x' });
+  rt.fakeProc(proc, 11, ['C:\\Program Files (x86)\\World of Warcraft\\_forever_\\Wow.exe'], { SteamGameId: '3000000001', STEAM_COMPAT_DATA_PATH: '/c/x' });
+  const list = games.running(proc);
+  assert.deepStrictEqual(list.map((g) => [g.appId, g.pid, g.name]), [['wow-forever', 11, 'World of Warcraft: Forever']]);
+  const w = new games.GameWatcher();
+  assert.deepStrictEqual(w.update(list).started.map((g) => g.appId), ['wow-forever']);
+});
+
 test('running games from /proc get known names', () => {
   const proc = tmpdir();
   rt.fakeProc(proc, 4242, ['Z:\\games\\Aniimo\\Aniimo.exe'], rt.PROTON_ENV);

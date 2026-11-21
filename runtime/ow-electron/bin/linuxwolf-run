@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Run an installed ow-electron app (e.g. MetaBot) on Linux.
+# Run an installed Overwolf app on Linux: an ow-electron app (e.g. MetaBot)
+# or a classic .opk app (unpacked folder with manifest.json, e.g. WoW
+# Forever Map).
 #
 #   linuxwolf-run <app folder | app.asar> [app args...]
 #
@@ -13,7 +15,7 @@ set -euo pipefail
 
 here="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 if [[ $# -lt 1 ]]; then
-  sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
   exit 2
 fi
 app="$1"; shift
@@ -39,4 +41,7 @@ export LINUXWOLF_BACKEND="$backend"
 # Electron refuses to start as root without --no-sandbox (containers, CI).
 [[ "$(id -u)" == 0 ]] && flags+=(--no-sandbox)
 
-exec "$electron" "${flags[@]}" "$here/src/main.js" "--lw-app=$app" "$@"
+entry="$here/src/main.js"
+[[ -f "$app/manifest.json" ]] && entry="$here/src/opk/main.js"
+
+exec "$electron" "${flags[@]}" "$entry" "--lw-app=$app" "$@"
