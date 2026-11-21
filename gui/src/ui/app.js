@@ -13,6 +13,15 @@ let gameFilter = { q: '', onlyApps: false };
 const logCache = new Map();
 let logStick = true; // keep the log scrolled to the end until the user scrolls up
 
+// Replace a node's content only when it really changed, so a redraw never
+// swaps the element under the mouse pointer for an identical copy.
+function setHTML(el, html) {
+  if (el.__html === html) return false;
+  el.__html = html;
+  el.innerHTML = html;
+  return true;
+}
+
 function toast(msg, ok = false) {
   const t = $('#toast');
   t.textContent = msg;
@@ -97,14 +106,14 @@ function renderLibrary() {
   const el = $('#page-library');
   const known = S.apps.filter((a) => !a.custom);
   const custom = S.apps.filter((a) => a.custom);
-  el.innerHTML = `
+  setHTML(el, `
     <h1>Library</h1>
     <p class="sub">Overwolf apps that run on Linux, next to your games under Proton.</p>
     <div class="grid">${known.map(appCard).join('')}</div>
     ${custom.length ? `<h2>Other installed apps</h2><div class="grid">${custom.map(appCard).join('')}</div>` : ''}
     <h2>Add an Overwolf app</h2>
     <div class="hint">Paste the app id (40 letters) of an Overwolf app: classic apps (.opk) come from Overwolf's store catalog, ow-electron apps from their update feed. Apps that need Overwolf's game events or native plugins will miss those features.</div>
-    <form class="add" id="add-form"><input id="add-uid" placeholder="e.g. iopjffpkfkhnkacicapeebfaicmffbekflfbfkmf" spellcheck="false" autocomplete="off"><button class="btn">Install</button></form>`;
+    <form class="add" id="add-form"><input id="add-uid" placeholder="e.g. iopjffpkfkhnkacicapeebfaicmffbekflfbfkmf" spellcheck="false" autocomplete="off"><button class="btn">Install</button></form>`);
   $('#add-form').onsubmit = async (e) => {
     e.preventDefault();
     const v = $('#add-uid').value;
@@ -125,7 +134,7 @@ function renderGames() {
   const steamAppIds = new Set(S.games.installed.map((g) => g.appId));
   const otherRunning = S.games.running.filter((g) => !g.appId || !steamAppIds.has(g.appId));
   const focus = document.activeElement?.id;
-  el.innerHTML = `
+  setHTML(el, `
     <h1>Games</h1>
     <p class="sub">Steam games on this computer. Linuxwolf sees a game as running when its Proton/Wine process is up.</p>
     ${S.system.steamRoots.length ? '' : '<div class="callout">No Steam installation found. Linuxwolf looks in ~/.local/share/Steam, ~/.steam and the Flatpak folder.</div>'}
@@ -148,7 +157,7 @@ function renderGames() {
     </tbody></table>` : `<div class="empty">${S.games.installed.length ? 'No game matches.' : 'No Steam games found.'}</div>`}
     ${otherRunning.length ? `<h2>Other games and Wine/Proton processes</h2><table><thead><tr><th>Program</th><th>Runner</th><th>Prefix</th></tr></thead><tbody>
       ${otherRunning.map((g) => `<tr><td><b>${esc(g.name || g.exe)}</b><div class="hint mono">pid ${g.pid}${typeof g.appId === 'number' ? ` · Steam ${g.appId}` : ''}</div></td><td>${esc(g.runner)}</td><td class="mono hint">${esc(g.winePrefix || '–')}</td></tr>`).join('')}
-    </tbody></table>` : ''}`;
+    </tbody></table>` : ''}`);
   const qi = $('#game-q');
   qi.oninput = () => {
     gameFilter.q = qi.value;
@@ -169,7 +178,7 @@ function renderGames() {
 function renderOverlay() {
   const o = S.system.overlay;
   const busy = S.processes.some((p) => p.running && p.key.startsWith('overlay:'));
-  $('#page-overlay').innerHTML = `
+  setHTML($('#page-overlay'), `
     <h1>In-game overlay</h1>
     <p class="sub">A Vulkan layer that draws into a game's frames. Works for Proton games because DXVK and VKD3D present through Vulkan. It draws a test HUD for now.</p>
     <div class="card" style="max-width:720px">
@@ -188,7 +197,7 @@ function renderOverlay() {
     <p class="hint">With debug log:</p>
     <div class="copy"><code>${esc(o.debugLaunchOption)}</code><button class="btn small" data-copy="${esc(o.debugLaunchOption)}">Copy</button></div>
     <h2>Anti-cheat</h2>
-    <div class="callout">Games with kernel-level anti-cheat may treat a Vulkan layer like any other injected code. Read <code>docs/spike-1.md</code> before you turn the overlay on for such a game. MetaBot and the TH.GL Companion do not need this layer; they use their own windows.</div>`;
+    <div class="callout">Games with kernel-level anti-cheat may treat a Vulkan layer like any other injected code. Read <code>docs/spike-1.md</code> before you turn the overlay on for such a game. MetaBot and the TH.GL Companion do not need this layer; they use their own windows.</div>`);
 }
 
 // ---------- Activity ----------
@@ -222,7 +231,7 @@ function renderActivity() {
   const procs = [...S.processes].sort((a, b) => (b.running - a.running) || b.startedAt - a.startedAt);
   if (!selectedProc || !procs.some((p) => p.key === selectedProc)) selectedProc = procs[0]?.key || null;
   const sel = procs.find((p) => p.key === selectedProc);
-  el.innerHTML = `
+  setHTML(el, `
     <h1>Activity</h1>
     <p class="sub">Installs, checks and running apps since Linuxwolf started. Full logs are in <span class="mono">~/.local/state/linuxwolf/gui/</span>.</p>
     ${procs.length ? `<div class="activity">
@@ -237,7 +246,7 @@ function renderActivity() {
         </div>
         <pre class="log mono" id="log"></pre>
       </div>
-    </div>` : '<div class="empty">Nothing yet. Install or start an app in the Library.</div>'}`;
+    </div>` : '<div class="empty">Nothing yet. Install or start an app in the Library.</div>'}`);
   const box = $('#log');
   if (box) {
     box.onscroll = () => {
@@ -264,7 +273,7 @@ function renderSettings() {
   const s = S.settings;
   const y = S.system;
   const ptrace = y.ptraceScope;
-  $('#page-settings').innerHTML = `
+  setHTML($('#page-settings'), `
     <h1>Settings</h1>
     <p class="sub">How Linuxwolf starts apps. Changes apply the next time an app starts.</p>
     <div class="form">
@@ -294,7 +303,7 @@ function renderSettings() {
       ${check('Overlay layer', y.overlay.installed, y.overlay.installed ? 'installed' : 'not installed', y.overlay.installed ? 'ok' : 'warn')}
       ${Object.entries(y.tools).map(([t, ok]) => check(t, ok, ok ? 'found' : 'not found', ok ? 'ok' : t === 'xprop' || t === '7z' ? 'bad' : 'warn')).join('')}
     </div>
-    <p class="hint">Linuxwolf ${esc(y.repoRoot)} · Electron ${esc(y.versions.electron)} · Node ${esc(y.versions.node)} · apps in <span class="mono">${esc(y.appsDir)}</span></p>`;
+    <p class="hint">Linuxwolf ${esc(y.repoRoot)} · Electron ${esc(y.versions.electron)} · Node ${esc(y.versions.node)} · apps in <span class="mono">${esc(y.appsDir)}</span></p>`);
 }
 
 // ---------- Shell ----------
@@ -309,9 +318,9 @@ function renderNav() {
   nt.hidden = !busy;
   nt.textContent = busy;
   const apps = S.apps.filter((a) => a.running).map((a) => a.name);
-  $('#now-playing').innerHTML = live.length
+  setHTML($('#now-playing'), live.length
     ? live.map((g) => `<div class="game"><span class="dot ok"></span>${esc(g.name || g.exe)}</div>`).join('') + `<div>${apps.length ? `with ${esc(apps.join(', '))}` : 'no app running'}</div>`
-    : `<div>No game running</div>${apps.length ? `<div>${esc(apps.join(', '))} running</div>` : ''}`;
+    : `<div>No game running</div>${apps.length ? `<div>${esc(apps.join(', '))} running</div>` : ''}`);
 }
 
 const RENDER = { library: renderLibrary, games: renderGames, overlay: renderOverlay, activity: renderActivity, settings: renderSettings };
