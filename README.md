@@ -13,10 +13,24 @@ target: [MetaBot.GG](https://metabot.gg/) with
 [Aniimo](https://store.steampowered.com/app/4126040) under Proton on
 KDE Plasma (Wayland).
 
+## Desktop app
+
+```sh
+gui/bin/linuxwolf                    # first start downloads Electron, needs Node.js >= 22.12
+gui/bin/linuxwolf --install-desktop  # add it to the app menu
+```
+
+Install, start and stop apps, see your Steam games and which ones run under
+Proton, start apps together with their game, manage the overlay layer and
+check your setup. See [docs/gui.md](docs/gui.md).
+
+![Linuxwolf library](docs/gui-library.png)
+
 ## What is here
 
 | Path | What it does |
 |---|---|
+| `gui` | The desktop app (Electron): library, games, auto-start with games, overlay, activity log, settings. Wraps the scripts below and the ow-electron runtime. |
 | `crates/lw-detect` | Detects games running under Proton/Wine by scanning `/proc` (Steam app id, game exe, Wine prefix). `cargo run -p lw-detect -- --watch` |
 | `crates/lw-overlay-layer` | Vulkan layer that draws an overlay into a game's frames. Works for Proton games because DXVK/VKD3D present through Vulkan. Currently draws a test HUD. |
 | `crates/lw-vk-smoketest` | Headless Vulkan app that checks the layer really draws into presented images (runs on Mesa lavapipe, no GPU needed). |
@@ -24,7 +38,7 @@ KDE Plasma (Wayland).
 | `tools/` | `fetch-thgl-companion.sh` + `thgl-palia-check.sh` (th.gl's native Linux app for Palia, see [docs/palia.md](docs/palia.md)), `fetch-ow-electron-app.sh` (installs an ow-electron app from Overwolf's feed), `metabot-smoketest.sh`, `smoketest.sh`, `install-overlay.sh`, font generator. |
 | `docs/` | Spike reports and design notes. |
 
-## Try it
+## Try it from the terminal
 
 ```sh
 # Game detection: start a Proton game, then

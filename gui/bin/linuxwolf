@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Linuxwolf desktop app.
+#
+#   linuxwolf                      open the window
+#   linuxwolf --hidden             start in the tray (for login autostart)
+#   linuxwolf --install-desktop    add Linuxwolf to the app menu
+#   linuxwolf --install-autostart  start Linuxwolf in the tray at login
+#   linuxwolf --uninstall-desktop  remove both again
+#
+# Uses the same Electron as the ow-electron runtime (downloaded on first
+# start). Needs Node.js >= 22.12.
+set -euo pipefail
+
+gui="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+repo="$(dirname "$gui")"
+data="${XDG_DATA_HOME:-$HOME/.local/share}"
+config="${XDG_CONFIG_HOME:-$HOME/.config}"
+
+desktop_entry() {
+  cat <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=Linuxwolf
+GenericName=Game companion apps
+Comment=Run Overwolf apps on Linux next to your Proton games
+Exec="$gui/bin/linuxwolf"$1
+Icon=linuxwolf
+Terminal=false
+Categories=Game;Utility;
+StartupWMClass=Linuxwolf
+DESKTOP
+}
+
+case "${1:-}" in
+  -h|--help)
+    sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
+    exit 0
+    ;;
+  --install-desktop)
+    install -Dm644 "$gui/src/ui/icon.png" "$data/icons/hicolor/256x256/apps/linuxwolf.png"
+    mkdir -p "$data/applications"
+    desktop_entry "" > "$data/applications/linuxwolf.desktop"
+    command -v update-desktop-database >/dev/null && update-desktop-database "$data/applications" 2>/dev/null || true
+    echo "added to the app menu: $data/applications/linuxwolf.desktop"
+    exit 0
+    ;;
+  --install-autostart)
+    mkdir -p "$config/autostart"
+    desktop_entry " --hidden" > "$config/autostart/linuxwolf.desktop"
+    echo "Linuxwolf starts in the tray at login: $config/autostart/linuxwolf.desktop"
+    exit 0
+    ;;
+  --uninstall-desktop)
+    rm -f "$data/applications/linuxwolf.desktop" "$config/autostart/linuxwolf.desktop" "$data/icons/hicolor/256x256/apps/linuxwolf.png"
+    echo "removed"
+    exit 0
+    ;;
+esac
+
+electron="$("$repo/runtime/ow-electron/bin/lw-electron")" || exit 2
+flags=()
+# The GUI itself is a normal window and runs natively on Wayland; Electron
+# picks the session's platform. LINUXWOLF_GUI_OZONE=x11 forces XWayland.
+[[ -n "${LINUXWOLF_GUI_OZONE:-}" ]] && flags+=("--ozone-platform=$LINUXWOLF_GUI_OZONE")
+[[ "$(id -u)" == 0 ]] && flags+=(--no-sandbox)
+exec "$electron" "${flags[@]}" --class=Linuxwolf "$gui/src/main.js" "$@"

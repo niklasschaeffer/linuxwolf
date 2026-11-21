@@ -46,6 +46,13 @@ not worth emulating.
 - [x] Installer with checksum check, setup check script.
 - [ ] Run it with Palia on a real Plasma desktop.
 
+## Side track: desktop app (see [docs/gui.md](docs/gui.md))
+
+- [x] One window for installing, starting and stopping apps, Steam/Proton
+  game status, auto-start of apps with their game, overlay layer, setup
+  checks and logs (`gui/`).
+- [ ] Try it on a real Plasma desktop (tray, notifications, Wayland).
+
 ## Step 3: Metabot + Aniimo end to end
 
 - Metabot detects Aniimo started through Steam/Proton and shows its

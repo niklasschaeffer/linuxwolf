@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Print the path of the Electron binary Linuxwolf uses, installing it first
+# if needed. Shared by linuxwolf-run (apps) and the Linuxwolf GUI.
+#
+#   lw-electron            # prints the path on stdout, progress on stderr
+#
+# LINUXWOLF_ELECTRON=<path> overrides the binary.
+set -euo pipefail
+
+here="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+electron="${LINUXWOLF_ELECTRON:-}"
+if [[ -z "$electron" ]]; then
+  # Electron comes from npm. Since Electron 42 the npm package no longer
+  # downloads its binary during `npm install`; it is fetched on first use.
+  # Do both steps here, with visible output, so a failure is not silent.
+  pkg="$here/node_modules/electron"
+  command -v node >/dev/null || { echo "lw-electron: node not found (need Node.js >= 22.12)" >&2; exit 2; }
+  if [[ ! -f "$pkg/package.json" ]]; then
+    echo "lw-electron: installing npm dependencies in $here" >&2
+    (cd "$here" && npm install --no-audit --no-fund) >&2 || { echo "lw-electron: npm install failed" >&2; exit 2; }
+  fi
+  if [[ ! -f "$pkg/path.txt" || ! -x "$pkg/dist/$(cat "$pkg/path.txt" 2>/dev/null)" ]]; then
+    echo "lw-electron: downloading the Electron binary (one time)" >&2
+    node "$pkg/install.js" >&2 || {
+      echo "lw-electron: Electron download failed. Check your network/proxy, then run: node $pkg/install.js" >&2
+      exit 2
+    }
+  fi
+  electron="$pkg/dist/$(cat "$pkg/path.txt")"
+fi
+if [[ ! -x "$electron" ]]; then
+  echo "lw-electron: Electron binary not found at $electron (set LINUXWOLF_ELECTRON to an Electron 42 binary)" >&2
+  exit 2
+fi
+printf '%s\n' "$electron"
