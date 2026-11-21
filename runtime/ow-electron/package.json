@@ -2,7 +2,7 @@
   "name": "linuxwolf-ow-electron",
   "version": "0.1.0",
   "private": true,
-  "description": "Runs ow-electron (Overwolf Electron) apps on stock Linux Electron, with a Linuxwolf implementation of app.overwolf and shims for Windows-only calls.",
+  "description": "Runs Overwolf apps on stock Linux Electron: ow-electron apps with a Linuxwolf implementation of app.overwolf and shims for Windows-only calls, and classic .opk apps with an overwolf.* API.",
   "main": "src/main.js",
   "bin": {
     "linuxwolf-run": "bin/linuxwolf-run"

@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const catalog = require('../src/core/catalog');
 const paths = require('../src/core/paths');
-const { tmpdir, fakeOwApp } = require('./helpers');
+const { tmpdir, fakeOwApp, fakeOpkApp } = require('./helpers');
 
 test('compareVersions sorts numerically', () => {
   assert.deepStrictEqual(['4.0.10', '4.0.4', '4.1.0', '3.9'].sort(catalog.compareVersions), ['3.9', '4.0.4', '4.0.10', '4.1.0']);
@@ -13,7 +13,7 @@ test('compareVersions sorts numerically', () => {
 
 test('nothing installed: known apps listed as not installed', () => {
   const apps = catalog.listApps(tmpdir());
-  assert.deepStrictEqual(apps.map((a) => [a.id, a.installed]), [['metabot', false], ['thgl-companion', false]]);
+  assert.deepStrictEqual(apps.map((a) => [a.id, a.installed]), [['metabot', false], ['thgl-companion', false], ['wow-forever-map', false]]);
 });
 
 test('newest installed MetaBot version wins, unknown ow-electron apps are listed too', () => {
@@ -56,4 +56,26 @@ test('install and launch commands use the repo scripts and settings', () => {
   for (const f of [paths.tool('fetch-ow-electron-app.sh'), paths.tool('fetch-thgl-companion.sh'), paths.tool('thgl-palia-check.sh'), paths.runner()]) {
     assert.ok(fs.existsSync(f), `${f} exists`);
   }
+});
+
+test('classic Overwolf apps: WoW Forever Map and other .opk apps', () => {
+  const dir = tmpdir();
+  fakeOpkApp(dir, catalog.WOW_FOREVER_MAP_UID, '5.0.0', 'WoW Forever Map');
+  const newest = fakeOpkApp(dir, catalog.WOW_FOREVER_MAP_UID, '5.0.1', 'WoW Forever Map');
+  const other = 'b'.repeat(40);
+  fakeOpkApp(dir, other, '1.0.0', 'Some Classic App');
+  const apps = catalog.listApps(dir);
+  const wfm = apps.find((a) => a.id === 'wow-forever-map');
+  assert.strictEqual(wfm.kind, 'opk');
+  assert.strictEqual(wfm.installed, true);
+  assert.strictEqual(wfm.path, newest);
+  assert.deepStrictEqual(wfm.games, ['wow-forever']);
+  const o = apps.find((a) => a.id === `ow:${other}`);
+  assert.strictEqual(o.kind, 'opk');
+  assert.strictEqual(o.name, 'Some Classic App');
+  assert.deepStrictEqual(catalog.installCommand(wfm), [paths.tool('fetch-opk-app.sh'), catalog.WOW_FOREVER_MAP_UID]);
+  const cmd = catalog.launchCommand(wfm, {});
+  assert.strictEqual(cmd.file, paths.runner());
+  assert.deepStrictEqual(cmd.args, [newest]);
+  for (const f of [paths.tool('fetch-opk-app.sh'), paths.tool('fetch-overwolf-app.sh')]) assert.ok(fs.existsSync(f), `${f} exists`);
 });

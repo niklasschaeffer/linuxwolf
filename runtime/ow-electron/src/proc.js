@@ -63,20 +63,28 @@ function inspect(dir, pid) {
   return { steamAppId, pid, exe, cmdline, winePrefix, runner: isProton ? 'proton' : 'wine' };
 }
 
-/** One scan. Returns one entry per Steam app id (lowest pid wins). */
-function scan(procRoot = '/proc') {
-  const byKey = new Map();
+/** Every Wine/Proton process (helpers like wineserver/explorer.exe left out). */
+function scanAll(procRoot = '/proc') {
   let entries = [];
   try {
     entries = fs.readdirSync(procRoot);
   } catch {
     return [];
   }
+  const out = [];
   for (const name of entries) {
     if (!/^\d+$/.test(name)) continue;
-    const pid = Number(name);
-    const game = inspect(path.join(procRoot, name), pid);
-    if (!game) continue;
+    const game = inspect(path.join(procRoot, name), Number(name));
+    if (game) out.push(game);
+  }
+  return out;
+}
+
+/** One scan. Returns one entry per Steam app id (lowest pid wins). */
+function scan(procRoot = '/proc') {
+  const byKey = new Map();
+  for (const game of scanAll(procRoot)) {
+    const pid = game.pid;
     const key = game.steamAppId !== null ? `steam:${game.steamAppId}` : `wine:${game.exe.toLowerCase()}`;
     const prev = byKey.get(key);
     if (!prev || pid < prev.pid) byKey.set(key, game);
@@ -84,4 +92,4 @@ function scan(procRoot = '/proc') {
   return [...byKey.values()];
 }
 
-module.exports = { scan, windowsExeName };
+module.exports = { scan, scanAll, windowsExeName };

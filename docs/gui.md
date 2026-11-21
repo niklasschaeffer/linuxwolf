@@ -22,7 +22,7 @@ natively on Wayland; `LINUXWOLF_GUI_OZONE=x11` forces XWayland.
 
 | Page | What you get | Built on |
 |---|---|---|
-| Library | MetaBot.GG and the TH.GL Companion with Install / Update / Start / Stop / Remove, a setup check for TH.GL, a "With game" switch per app, and a field to install any other ow-electron app by its Overwolf app id. | `tools/fetch-ow-electron-app.sh`, `tools/fetch-thgl-companion.sh`, `tools/thgl-palia-check.sh`, `runtime/ow-electron/bin/linuxwolf-run` |
+| Library | MetaBot.GG, the TH.GL Companion and WoW Forever Map with Install / Update / Start / Stop / Remove, a setup check for TH.GL, a "With game" switch per app, and a field to install any other Overwolf app by its app id (classic `.opk` or ow-electron). | `tools/fetch-ow-electron-app.sh`, `tools/fetch-opk-app.sh`, `tools/fetch-overwolf-app.sh`, `tools/fetch-thgl-companion.sh`, `tools/thgl-palia-check.sh`, `runtime/ow-electron/bin/linuxwolf-run` |
 | Games | Installed Steam games (all libraries, native and Flatpak Steam), which ones run under Proton right now, which Linuxwolf apps go with them, and a Play button (`steam://rungameid/<id>`). Other Wine/Proton processes are listed too. | `runtime/ow-electron/src/steam.js` and `proc.js` (same rules as `lw-detect`) |
 | Overlay | Build/install/remove the Vulkan overlay layer, copy the Steam launch option, anti-cheat note. | `tools/install-overlay.sh` |
 | Activity | Live output of every install, check and running app, with Stop and "Open log file". | logs in `~/.local/state/linuxwolf/gui/` |
@@ -59,7 +59,7 @@ cd gui && npm test
 |---|---|
 | `src/main.js` | window, tray, IPC, game watcher and auto-start |
 | `src/core/catalog.js` | known apps, installed apps, install and start commands |
-| `src/core/games.js` | Steam games, running Proton games, start/stop events |
+| `src/core/games.js` | Steam games, running Proton games, known non-Steam Wine games (WoW Forever), start/stop events |
 | `src/core/processes.js` | starting/stopping apps and scripts, log following, finding running apps |
 | `src/core/system.js` | system check and overlay layer state |
 | `src/core/settings.js` | settings file |
