@@ -69,13 +69,21 @@ function validScheme(s) {
   return typeof s === 'string' && /^[a-z][a-z0-9+.-]*$/i.test(s);
 }
 
+function deepLinks(argv) {
+  return (argv || []).filter((a) => typeof a === 'string' && /^[a-z][a-z0-9+.-]*:\/\//i.test(a) && !/^(https?|file):/i.test(a));
+}
+
+function redact(link) {
+  return link.replace(/([?&][^=&]*(?:token|code|secret|key)[^=&]*=)[^&]*/gi, '$1<redacted>');
+}
+
 function run(file, args) {
   return new Promise((resolve) => {
     childProcess.execFile(file, args, { timeout: 10000 }, (err, stdout) => resolve(err ? null : String(stdout).trim()));
   });
 }
 
-function install(app, { uid, appRoot, launchPath = appRoot, productName, env = process.env, runner = path.join(__dirname, '../bin/linuxwolf-run'), exec = run } = {}) {
+function install(app, { uid, appRoot, launchPath = appRoot, productName, env = process.env, runner = path.join(__dirname, '../bin/linuxwolf-run'), exec = run, linkLog = null, argv = process.argv } = {}) {
   const dir = applicationsDir(env);
   const fileName = desktopFileName(uid, productName);
   const file = path.join(dir, fileName);
@@ -127,7 +135,23 @@ function install(app, { uid, appRoot, launchPath = appRoot, productName, env = p
   };
   app.isDefaultProtocolClient = (scheme) => validScheme(scheme) && schemes.has(scheme.toLowerCase());
 
+  // A process started by a link usually has no visible stderr (KDE starts
+  // it), so links also go to a log file for diagnosing sign-in problems.
+  function noteLinks(where, args) {
+    for (const link of deepLinks(args)) {
+      const line = `[protocol] ${where}: ${redact(link)}`;
+      log(line);
+      if (linkLog) {
+        try {
+          fs.appendFileSync(linkLog, `${new Date().toISOString()} pid ${process.pid} ${line}\n`);
+        } catch {}
+      }
+    }
+  }
+  noteLinks('started with link', argv);
+  if (typeof app.on === 'function') app.on('second-instance', (_e, args) => noteLinks('link from a second instance', args));
+
   return { file, schemes, settled: () => pending };
 }
 
-module.exports = { install, desktopEntry, desktopFileName, quoteExecArg };
+module.exports = { install, desktopEntry, desktopFileName, quoteExecArg, deepLinks, redact };

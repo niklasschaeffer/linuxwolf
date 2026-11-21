@@ -68,3 +68,9 @@ test('Exec arguments with spaces and special characters are quoted per the deskt
   assert.equal(protocol.quoteExecArg('/home/nick/My Apps/x'), '"/home/nick/My Apps/x"');
   assert.equal(protocol.quoteExecArg('a"b$c'), '"a\\\\"b\\\\$c"');
 });
+
+test('deep links in argv are found and their tokens redacted', () => {
+  const argv = ['/usr/bin/electron', '--ozone-platform=x11', 'https://x', 'metabotgg://auth/discord?token=abc.def&lang=de'];
+  assert.deepEqual(protocol.deepLinks(argv), ['metabotgg://auth/discord?token=abc.def&lang=de']);
+  assert.equal(protocol.redact(argv[3]), 'metabotgg://auth/discord?token=<redacted>&lang=de');
+});
