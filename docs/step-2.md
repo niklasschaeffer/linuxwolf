@@ -66,6 +66,26 @@ MetaBot puts companions in transparent windows with
 The MetaBot setting "companion always on top" (`companionOnTop`) is off by
 default; the companion is then a normal window.
 
+## Links and sign-in (custom URL schemes)
+
+ow-electron apps register URL schemes with `app.setAsDefaultProtocolClient()`.
+MetaBot's Discord login ends in the browser with a redirect to
+`metabotgg://auth/discord?token=...`. On Linux, stock Electron hands this to
+`xdg-settings` with its own `electron.desktop`, which does not exist, so KDE
+had no handler for the link and the sign-in never reached the app.
+
+The runtime (`src/protocol.js`) answers the call itself: it writes a hidden
+desktop entry `~/.local/share/applications/linuxwolf-app-<uid>.desktop` with
+`MimeType=x-scheme-handler/<scheme>;` and
+`Exec=env LINUXWOLF_BACKEND=... linuxwolf-run <app folder> %u`, and makes it the
+default with `xdg-mime default`. The entry is rewritten on every app start,
+so it follows app updates. A link opened while the app runs starts a second
+process, which hands the link to the running one through Electron's
+single-instance lock (`second-instance`), as on Windows; a link opened while
+the app is closed starts it with the link in `process.argv`.
+
+Check it with `xdg-mime query default x-scheme-handler/metabotgg`.
+
 ## Try it
 
 ```sh
